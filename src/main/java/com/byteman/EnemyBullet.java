@@ -4,7 +4,7 @@ import java.awt.*;
 
 public class EnemyBullet {
     private int x, y, dx;
-    private int size = 12; // Slightly smaller than player bullets
+    private int size = 12;
 
     public EnemyBullet(int x, int y, int dx) {
         this.x = x;

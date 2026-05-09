@@ -4,7 +4,6 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 
 public class PowerUp {
-    // THIS IS THE LINE JAVA IS LOOKING FOR:
     public enum Type { RAPID_FIRE, SLOW_MOTION }
 
     private int x, y;

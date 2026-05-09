@@ -78,7 +78,6 @@ public class Player {
     public Rectangle getBounds() { return new Rectangle(x, y, width, height); }
 
     public int getX() { return x; }
-    // THE MISSING METHOD IS ADDED HERE:
     public int getY() { return y; }
 
     public void draw(Graphics2D g) {

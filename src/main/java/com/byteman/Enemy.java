@@ -10,7 +10,7 @@ public class Enemy {
     private int speed;
 
     private int shootTimer = 0;
-    private int reactionTimer = 0; // NEW: Takes time to detect the player
+    private int reactionTimer = 0; // Takes time to detect the player
     private static final int REACTION_TIME = 30; // 30 frames = 0.5 seconds to react
 
     private BufferedImage sprite;
