@@ -27,15 +27,12 @@ public class Player {
     public void setRightPressed(boolean b) { rightPressed = b; if(b) facingRight = true; }
     public void jump() { if (!isJumping) { dy = JUMP_STRENGTH; isJumping = true; } }
 
-    // THE BUFF UPGRADE: Now accepts hasRapidFire parameter
     public void shoot(ArrayList<Bullet> bullets, boolean hasRapidFire) {
-        // If we have rapid fire OR we have ammo and aren't reloading
         if (hasRapidFire || (currentAmmo > 0 && reloadTimer == 0)) {
             int bulletDX = facingRight ? 12 : -12;
             int startX = facingRight ? x + width + 4 : x - 12;
             bullets.add(new Bullet(startX, y + (height / 2), bulletDX));
 
-            // Only drain ammo if we DO NOT have rapid fire
             if (!hasRapidFire) {
                 currentAmmo--;
                 if (currentAmmo == 0) reloadTimer = RELOAD_TIME;
@@ -59,7 +56,6 @@ public class Player {
         y += dy;
         isJumping = true;
 
-        // THE JUMP FIX: +1 to height for the "shoe sensor"
         Rectangle playerFeet = new Rectangle(x, y, width, height + 1);
 
         for (Platform plat : platforms) {
@@ -80,7 +76,10 @@ public class Player {
 
     public void resetPosition(int startX, int startY) { this.x = startX; this.y = startY; this.dy = 0; }
     public Rectangle getBounds() { return new Rectangle(x, y, width, height); }
+
     public int getX() { return x; }
+    // THE MISSING METHOD IS ADDED HERE:
+    public int getY() { return y; }
 
     public void draw(Graphics2D g) {
         if (sprite != null) {

@@ -17,6 +17,7 @@ public class GamePanel extends JPanel implements ActionListener {
 
     private Player player;
     private ArrayList<Bullet> bullets = new ArrayList<>();
+    private ArrayList<EnemyBullet> enemyBullets = new ArrayList<>();
     private ArrayList<Enemy> enemies = new ArrayList<>();
     private ArrayList<Platform> platforms = new ArrayList<>();
     private ArrayList<PowerUp> powerUps = new ArrayList<>();
@@ -24,7 +25,7 @@ public class GamePanel extends JPanel implements ActionListener {
     private BufferedImage backgroundImage;
     private Random rand = new Random();
 
-    // BUFF TIMERS (60 frames = 1 second. 600 = 10 seconds)
+    // BUFF TIMERS
     private int rapidFireTimer = 0;
     private int slowMoTimer = 0;
     private static final int BUFF_DURATION = 600;
@@ -53,53 +54,66 @@ public class GamePanel extends JPanel implements ActionListener {
     }
 
     private void loadLevel(int level) {
-        bullets.clear(); enemies.clear(); platforms.clear(); powerUps.clear();
+        bullets.clear(); enemyBullets.clear(); enemies.clear(); platforms.clear(); powerUps.clear();
         rapidFireTimer = 0; slowMoTimer = 0;
 
         player.resetPosition(50, GameConstants.FLOOR_Y - 100);
 
-        int numPlatforms = 4 + rand.nextInt(3);
-        int currentX = 100 + rand.nextInt(200);
-        int currentY = GameConstants.FLOOR_Y - 80 - rand.nextInt(40);
+        // --- ORGANIC / RANDOMIZED STAIRCASE GENERATION ---
+        int numPlatforms = 5 + (level / 2);
+        int currentX = 100 + rand.nextInt(300); // Start somewhere roughly on the left side
+        int currentY = GameConstants.FLOOR_Y - 90;
 
         for (int i = 0; i < numPlatforms; i++) {
-            int platWidth = 80 + rand.nextInt(80);
-
-            if (currentX < 0) currentX = 20;
-            if (currentX + platWidth > GameConstants.WIDTH) currentX = GameConstants.WIDTH - platWidth - 20;
-
+            int platWidth = 80 + rand.nextInt(80); // Random width between 80 and 160
             platforms.add(new Platform(currentX, currentY, platWidth, 20));
 
-            currentY -= (60 + rand.nextInt(60));
+            // Move up a random amount (keeps the staircase feel)
+            currentY -= (70 + rand.nextInt(40));
 
-            int shift = 50 + rand.nextInt(100);
-            if (rand.nextBoolean()) currentX += shift;
-            else currentX -= shift;
+            // Randomly jump left or right for the next platform
+            int jumpDistance = 60 + rand.nextInt(120);
+            if (rand.nextBoolean()) {
+                currentX += jumpDistance; // Build to the right
+            } else {
+                currentX -= jumpDistance; // Build to the left
+            }
 
-            if (currentY < 100) break;
+            // Boundary checks: force them to bounce back if they hit the edge of the screen
+            if (currentX < 30) {
+                currentX = 30 + rand.nextInt(50);
+            }
+            if (currentX + platWidth > GameConstants.WIDTH - 30) {
+                currentX = GameConstants.WIDTH - platWidth - 30 - rand.nextInt(50);
+            }
+
+            if (currentY < 100) break; // Don't build off the top of the screen
         }
 
-        // SPAWN A RANDOM POWER UP (50% Chance per level)
+        // SPAWN POWER UP
         if (rand.nextBoolean() && platforms.size() > 0) {
             Platform targetPlat = platforms.get(rand.nextInt(platforms.size()));
             PowerUp.Type type = rand.nextBoolean() ? PowerUp.Type.RAPID_FIRE : PowerUp.Type.SLOW_MOTION;
-            // Spawns 32 pixels above the platform to match the new size
             powerUps.add(new PowerUp(targetPlat.getBounds().x + 10, targetPlat.getBounds().y - 32, type));
         }
 
-        int numEnemies = (level + 1) / 2;
-        for (int i = 0; i < numEnemies; i++) {
-            int spawnIndex = i % platforms.size();
-            Platform p = platforms.get(spawnIndex);
+        // ENEMY SPAWNS (Easy to Hard)
+        int numPlatformEnemies = Math.min(platforms.size() - 1, (level + 1) / 2);
+
+        for (int i = 1; i <= numPlatformEnemies; i++) {
+            Platform p = platforms.get(i);
             Rectangle bounds = p.getBounds();
-            int eX = bounds.x + (bounds.width / 2) - 25;
-            int eY = bounds.y - 50;
             int speed = 2 + (level / 4);
-            enemies.add(new Enemy(eX, eY, (bounds.width / 2) - 25, speed));
+            enemies.add(new Enemy(bounds.x, bounds.y - 48, bounds.width - 48, speed));
         }
 
+        // Add extra ground troops ONLY starting from level 3
         if (level >= 3) {
-            enemies.add(new Enemy(400, GameConstants.FLOOR_Y - 50, 200, 3 + (level / 5)));
+            int groundEnemies = level / 3;
+            for (int i = 0; i < groundEnemies; i++) {
+                int startX = 200 + rand.nextInt(400);
+                enemies.add(new Enemy(startX, GameConstants.FLOOR_Y - 48, 200, 2 + (level / 5)));
+            }
         }
     }
 
@@ -123,18 +137,15 @@ public class GamePanel extends JPanel implements ActionListener {
         im.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, 0), "shoot");
         am.put("shoot", new AbstractAction() {
             public void actionPerformed(ActionEvent e) {
-                if (gameState == State.PLAYING) {
-                    player.shoot(bullets, rapidFireTimer > 0);
-                }
+                if (gameState == State.PLAYING) { player.shoot(bullets, rapidFireTimer > 0); }
             }
         });
 
         im.put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "enter");
         am.put("enter", new AbstractAction() {
             public void actionPerformed(ActionEvent e) {
-                if (gameState == State.DEAD) {
-                    loadLevel(currentLevel); gameState = State.PLAYING;
-                } else if (gameState == State.GAME_OVER || gameState == State.GAME_WON) {
+                if (gameState == State.DEAD) { loadLevel(currentLevel); gameState = State.PLAYING; }
+                else if (gameState == State.GAME_OVER || gameState == State.GAME_WON) {
                     currentLevel = 1; player.lives = 3; player.currentAmmo = player.maxAmmo; player.score = 0;
                     loadLevel(currentLevel); gameState = State.PLAYING;
                 }
@@ -178,7 +189,14 @@ public class GamePanel extends JPanel implements ActionListener {
             player.update(platforms);
 
             if (slowMoTimer == 0 || frameCount % 2 == 0) {
-                for (Enemy enemy : enemies) enemy.update();
+                for (Enemy enemy : enemies) enemy.update(player, enemyBullets);
+
+                Iterator<EnemyBullet> ebIt = enemyBullets.iterator();
+                while (ebIt.hasNext()) {
+                    EnemyBullet eb = ebIt.next();
+                    eb.update();
+                    if (eb.isOffScreen()) ebIt.remove();
+                }
             }
 
             Iterator<Bullet> it = bullets.iterator();
@@ -210,10 +228,14 @@ public class GamePanel extends JPanel implements ActionListener {
 
         for (Enemy enemy : enemies) {
             if (pRect.intersects(enemy.getBounds())) {
-                player.lives--;
-                if (player.lives > 0) gameState = State.DEAD;
-                else gameState = State.GAME_OVER;
-                return;
+                killPlayer(); return;
+            }
+        }
+
+        Iterator<EnemyBullet> ebIt = enemyBullets.iterator();
+        while (ebIt.hasNext()) {
+            if (pRect.intersects(ebIt.next().getBounds())) {
+                ebIt.remove(); killPlayer(); return;
             }
         }
 
@@ -231,6 +253,12 @@ public class GamePanel extends JPanel implements ActionListener {
             }
             if (hit) bulletIt.remove();
         }
+    }
+
+    private void killPlayer() {
+        player.lives--;
+        if (player.lives > 0) gameState = State.DEAD;
+        else gameState = State.GAME_OVER;
     }
 
     private void checkLevelTransition() {
@@ -261,6 +289,7 @@ public class GamePanel extends JPanel implements ActionListener {
         for (PowerUp pu : powerUps) pu.draw(g2d);
         for (Enemy enemy : enemies) enemy.draw(g2d);
         for (Bullet b : bullets) b.draw(g2d);
+        for (EnemyBullet eb : enemyBullets) eb.draw(g2d);
         player.draw(g2d);
 
         drawHUD(g2d);
@@ -296,28 +325,51 @@ public class GamePanel extends JPanel implements ActionListener {
     private void drawStateOverlays(Graphics2D g2d) {
         if (gameState == State.PLAYING) return;
 
-        g2d.setColor(new Color(0, 0, 0, 200));
+        g2d.setColor(new Color(0, 0, 0, 220));
         g2d.fillRect(0, 0, GameConstants.WIDTH, GameConstants.HEIGHT);
         g2d.setColor(Color.WHITE);
 
+        int centerX = GameConstants.WIDTH / 2;
+        int centerY = GameConstants.HEIGHT / 2;
+
         if (gameState == State.PAUSED) {
-            g2d.setFont(new Font("Arial", Font.BOLD, 50)); g2d.drawString("PAUSED", GameConstants.WIDTH/2 - 100, GameConstants.HEIGHT/2 - 50);
-            g2d.setFont(new Font("Arial", Font.PLAIN, 24)); g2d.drawString("Press ESC to Resume", GameConstants.WIDTH/2 - 120, GameConstants.HEIGHT/2 + 10);
-            g2d.setColor(Color.GREEN); g2d.drawString("Press S to Save Game", GameConstants.WIDTH/2 - 120, GameConstants.HEIGHT/2 + 50);
-            g2d.setColor(Color.RED); g2d.drawString("Press Q to Quit to Menu", GameConstants.WIDTH/2 - 120, GameConstants.HEIGHT/2 + 90);
+            g2d.setFont(new Font("Arial", Font.BOLD, 50));
+            g2d.drawString("PAUSED", centerX - 100, centerY - 130);
+
+            g2d.setFont(new Font("Arial", Font.PLAIN, 20));
+            g2d.drawString("Press ESC to Resume", centerX - 100, centerY - 80);
+            g2d.setColor(Color.GREEN);
+            g2d.drawString("Press S to Save Game", centerX - 100, centerY - 50);
+            g2d.setColor(Color.RED);
+            g2d.drawString("Press Q to Quit to Menu", centerX - 100, centerY - 20);
+
+            g2d.setColor(Color.YELLOW);
+            g2d.setFont(new Font("Arial", Font.BOLD, 22));
+            g2d.drawString("--- HOW TO PLAY ---", centerX - 110, centerY + 40);
+
+            g2d.setFont(new Font("Arial", Font.PLAIN, 18));
+            g2d.setColor(Color.WHITE);
+            g2d.drawString("Left / Right Arrows: Move  |  Up Arrow: Jump  |  Z: Shoot", centerX - 225, centerY + 70);
+
+            g2d.setColor(Color.ORANGE);
+            g2d.drawString("\u25A0 Gold Cube: RAPID FIRE (10s Infinite Ammo)", centerX - 180, centerY + 110);
+
+            g2d.setColor(Color.CYAN);
+            g2d.drawString("\u25A0 Cyan Cube: SLOW MOTION (10s Slower Enemies)", centerX - 195, centerY + 140);
+
         } else if (gameState == State.DEAD) {
-            g2d.setFont(new Font("Arial", Font.BOLD, 40)); g2d.drawString("YOU DIED", GameConstants.WIDTH/2 - 100, GameConstants.HEIGHT/2 - 20);
-            g2d.setFont(new Font("Arial", Font.PLAIN, 24)); g2d.drawString("Press ENTER to Respawn", GameConstants.WIDTH/2 - 140, GameConstants.HEIGHT/2 + 30);
+            g2d.setFont(new Font("Arial", Font.BOLD, 40)); g2d.drawString("YOU DIED", centerX - 100, centerY - 20);
+            g2d.setFont(new Font("Arial", Font.PLAIN, 24)); g2d.drawString("Press ENTER to Respawn", centerX - 140, centerY + 30);
         } else if (gameState == State.GAME_OVER) {
-            g2d.setColor(Color.RED); g2d.setFont(new Font("Arial", Font.BOLD, 60)); g2d.drawString("GAME OVER", GameConstants.WIDTH/2 - 190, GameConstants.HEIGHT/2 - 20);
+            g2d.setColor(Color.RED); g2d.setFont(new Font("Arial", Font.BOLD, 60)); g2d.drawString("GAME OVER", centerX - 190, centerY - 20);
             g2d.setColor(Color.WHITE); g2d.setFont(new Font("Arial", Font.PLAIN, 24));
-            g2d.drawString("Final Score: " + player.score, GameConstants.WIDTH/2 - 100, GameConstants.HEIGHT/2 + 20);
-            g2d.drawString("Press ENTER to Try Again", GameConstants.WIDTH/2 - 145, GameConstants.HEIGHT/2 + 60);
+            g2d.drawString("Final Score: " + player.score, centerX - 100, centerY + 20);
+            g2d.drawString("Press ENTER to Try Again", centerX - 145, centerY + 60);
         } else if (gameState == State.GAME_WON) {
-            g2d.setColor(Color.GREEN); g2d.setFont(new Font("Arial", Font.BOLD, 60)); g2d.drawString("YOU WIN!", GameConstants.WIDTH/2 - 150, GameConstants.HEIGHT/2 - 20);
+            g2d.setColor(Color.GREEN); g2d.setFont(new Font("Arial", Font.BOLD, 60)); g2d.drawString("YOU WIN!", centerX - 150, centerY - 20);
             g2d.setColor(Color.WHITE); g2d.setFont(new Font("Arial", Font.PLAIN, 24));
-            g2d.drawString("Final Score: " + player.score, GameConstants.WIDTH/2 - 100, GameConstants.HEIGHT/2 + 20);
-            g2d.drawString("Press ENTER to Play Again", GameConstants.WIDTH/2 - 145, GameConstants.HEIGHT/2 + 60);
+            g2d.drawString("Final Score: " + player.score, centerX - 100, centerY + 20);
+            g2d.drawString("Press ENTER to Play Again", centerX - 145, centerY + 60);
         }
     }
 }
